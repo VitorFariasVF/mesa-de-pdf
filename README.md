@@ -11,9 +11,12 @@ Parte do [VF Tools](https://vitorfariasvf.github.io/VF-Tools/). Segue o [padrão
 - **Fotos em PDF:** JPG, PNG e WebP, uma foto por página. Tamanho (A4, Carta ou ajustar à foto), margem e qualidade.
 - **Preferências** (tamanho, margem e qualidade) ficam no `localStorage`. Os arquivos nunca.
 
+## PDFs com senha
+Um PDF protegido entra na mesa como um card com cadeado (“PDF não disponível”). Toque nele, digite a senha no modal e as páginas aparecem no mesmo lugar. Enquanto houver cadeado na mesa o download fica bloqueado (desbloqueie ou remova). A senha só é usada no navegador e não é guardada. Páginas de PDFs desbloqueados são exportadas como imagem, então o texto deixa de ser selecionável.
+
 ## Limites
 50 MB por arquivo · 150 MB no total · 200 páginas por PDF · 30 fotos no celular (60 no computador). Fotos são reduzidas (lado maior de 2000 px) para não travar o aparelho; "Original" usa até 4096 px (3000 px no celular).
-PDFs com senha não abrem. Fotos HEIC do iPhone não são aceitas pelo navegador: converta para JPG.
+Fotos HEIC do iPhone não são aceitas pelo navegador: converta para JPG.
 
 ## Acessibilidade
 Arrastar nunca é o único caminho: há botões de mover e o campo "Posição". Teclado: setas movem o foco, **Espaço** seleciona, **Enter** amplia, **Alt + seta** move a página, **Delete** exclui, **Ctrl+Z** desfaz. Cada miniatura tem nome acessível ("Página 3 de 20, arquivo.pdf, selecionada") e as ações são anunciadas por `aria-live`.

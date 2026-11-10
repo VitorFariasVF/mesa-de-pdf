@@ -120,6 +120,18 @@
   <div class="zbody"><canvas id="zcanvas" role="img" aria-label="Página ampliada"></canvas></div>
 </dialog>
 
+<dialog id="unlock" class="udlg" aria-labelledby="unlock-t" aria-describedby="unlock-d">
+  <form id="unlock-form" novalidate>
+    <svg class="udlg-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+    <h2 id="unlock-t">PDF não disponível</h2>
+    <p id="unlock-d"><strong id="unlock-name"></strong><br>Este PDF tem senha. Digite a senha para desbloquear. Ela é usada só aqui no seu aparelho e não é guardada nem enviada.</p>
+    <div class="field"><label for="unlock-pw">Senha</label><input id="unlock-pw" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="unlock-err"></div>
+    <label class="check"><input id="unlock-show" type="checkbox"> Mostrar senha</label>
+    <p id="unlock-err" class="field-err" role="alert" hidden></p>
+    <div class="udlg-actions"><button id="unlock-remove" class="btn" type="button">Remover da mesa</button><button id="unlock-cancel" class="btn" type="button">Agora não</button><button id="unlock-go" class="btn primary" type="submit">Desbloquear</button></div>
+  </form>
+</dialog>
+
 <p id="live" class="sr-only" aria-live="polite"></p>
 <input id="file" type="file" multiple hidden aria-label="Escolher arquivos PDF ou fotos" tabindex="-1">
 

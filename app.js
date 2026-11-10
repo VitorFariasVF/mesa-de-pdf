@@ -44,6 +44,71 @@
     $("#cancel").hidden = true;
   }
 
+  const isPasswordErr = e => !!e && (e.name === "PasswordException" || /password/i.test(e.message || ""));
+  /* Registra um PDF já aberto na mesa. Devolve a primeira página criada (com .count) ou null. */
+  function addPdf({ id, f, bytes, doc, errors }) {
+    if (doc.numPages > LIM.pages) { errors.push(`“${f.name}” tem ${doc.numPages} páginas, acima do limite de ${LIM.pages} por PDF. Separe em partes menores e tente de novo.`); doc.destroy(); return null; }
+    S.files.set(id, { id, name: f.name, kind: "pdf", size: f.size, bytes, doc, n: doc.numPages });
+    let first = null;
+    for (let i = 0; i < doc.numPages; i++) { const p = { id: "p" + S.nid++, f: id, i, r: 0 }; S.pages.push(p); first = first || p; }
+    first.count = doc.numPages; return first;
+  }
+  /* PDF com senha: entra na mesa como uma página-cadeado até ser desbloqueado */
+  function addLocked({ id, f, bytes }) {
+    S.files.set(id, { id, name: f.name, kind: "pdf", size: f.size, bytes, doc: null, n: 1, locked: true });
+    const p = { id: "p" + S.nid++, f: id, i: 0, r: 0, lock: true }; S.pages.push(p); totalBytes += f.size; p.count = 1; return p;
+  }
+  const lockedCount = pages => pages.filter(p => p.lock).length;
+
+  /* ---------- Desbloquear PDF com senha (modal) ---------- */
+  const udlg = $("#unlock"); let unlockFor = null, unlockOpener = null;
+  function openUnlock(pageId, opener) {
+    const p = byId(pageId); if (!p || !p.lock) return; const f = fileOf(p); unlockFor = f.id; unlockOpener = opener || null;
+    $("#unlock-name").textContent = f.name; const input = $("#unlock-pw");
+    input.value = ""; input.type = "password"; input.removeAttribute("aria-invalid"); $("#unlock-show").checked = false;
+    $("#unlock-err").hidden = true; $("#unlock-err").textContent = ""; $("#unlock-go").disabled = false; $("#unlock-go").textContent = "Desbloquear";
+    udlg.showModal(); input.focus();
+  }
+  function unlockFail(m) { const input = $("#unlock-pw"); $("#unlock-err").textContent = m; $("#unlock-err").hidden = false; input.setAttribute("aria-invalid", "true"); input.focus(); input.select(); }
+  async function unlockSubmit(e) {
+    e.preventDefault(); const f = S.files.get(unlockFor), go = $("#unlock-go"); if (!f || go.disabled) return;
+    const pw = $("#unlock-pw").value; if (!pw) { unlockFail("Digite a senha do PDF."); return; }
+    go.disabled = true; go.textContent = "Verificando…"; $("#unlock-err").hidden = true; $("#unlock-pw").removeAttribute("aria-invalid");
+    try {
+      await loadLibs();
+      const doc = await window.pdfjsLib.getDocument({ data: new Uint8Array(f.bytes.slice(0)), password: pw, worker: sharedWorker }).promise;
+      if (doc.numPages > LIM.pages) { doc.destroy(); unlockFail(`Este PDF tem ${doc.numPages} páginas, acima do limite de ${LIM.pages}.`); }
+      else { finishUnlock(f, doc, pw); }
+    } catch (x) {
+      if (isPasswordErr(x)) unlockFail("Senha incorreta. Confira maiúsculas e minúsculas e tente de novo.");
+      else unlockFail("Não consegui abrir este PDF com essa senha. O arquivo pode estar danificado.");
+    }
+    go.disabled = false; go.textContent = "Desbloquear";
+  }
+  /* Troca cada página-cadeado do arquivo pelas páginas reais, na mesma posição */
+  function finishUnlock(f, doc, pw) {
+    snapshot("Desbloquear PDF"); S.redo = []; S.exported = false;
+    f.doc = doc; f.n = doc.numPages; f.locked = false; f.password = pw;
+    const out = []; let first = null;
+    for (const p of S.pages) {
+      if (p.lock && p.f === f.id) { S.sel.delete(p.id); for (let i = 0; i < doc.numPages; i++) { const q = { id: "p" + S.nid++, f: f.id, i, r: p.r }; out.push(q); first = first || q; } }
+      else out.push(p);
+    }
+    S.pages = out; S.focusId = first ? first.id : S.focusId; unlockFor = null; udlg.close();
+    const h = $("#hint"); h.textContent = `“${f.name}” desbloqueado. Ao baixar, as páginas dele vão como imagem (o texto deixa de ser selecionável).`; h.hidden = false;
+    render(); say(`“${f.name}” desbloqueado. ${doc.numPages} ${n1(doc.numPages, "página", "páginas")}.`);
+    const b = first && $(`.sel[data-id="${first.id}"]`); if (b) b.focus();
+  }
+  $("#unlock-form").addEventListener("submit", unlockSubmit);
+  $("#unlock-show").addEventListener("change", e => { $("#unlock-pw").type = e.target.checked ? "text" : "password"; });
+  $("#unlock-pw").addEventListener("input", () => { $("#unlock-err").hidden = true; $("#unlock-pw").removeAttribute("aria-invalid"); });
+  $("#unlock-cancel").addEventListener("click", () => udlg.close());
+  $("#unlock-remove").addEventListener("click", () => {
+    const id = unlockFor; udlg.close(); if (!id) return;
+    mutate("Remover PDF bloqueado", () => { S.pages = S.pages.filter(p => !(p.lock && p.f === id)); pruneSel(); }, "PDF bloqueado removido da mesa.");
+  });
+  udlg.addEventListener("close", () => { if (unlockOpener && unlockOpener.isConnected) unlockOpener.focus(); unlockOpener = null; });
+
   async function ingest(list) {
     list = [...list]; if (!list.length) return;
     if (S.busy) { showAlert("Aguarde: ainda estou lendo os arquivos anteriores."); return; }
@@ -58,14 +123,13 @@
         if (!isPdf(f) && !isImg(f)) { errors.push(`“${f.name}” não é PDF nem foto (JPG, PNG ou WebP).`); continue; }
         if (f.size > LIM.file) { errors.push(`“${f.name}” tem ${fmt(f.size)}, acima do limite de ${fmt(LIM.file)}. Divida o arquivo em partes menores e tente de novo.`); continue; }
         if (totalBytes + f.size > LIM.total) { errors.push(`“${f.name}” passaria do limite de ${fmt(LIM.total)} no total. Exporte o que já está na mesa e comece de novo.`); continue; }
-        const id = "f" + S.nid++;
+        const id = "f" + S.nid++; let lockedBytes = null;
         try {
           if (isPdf(f)) {
-            const bytes = await f.arrayBuffer();
+            const bytes = await f.arrayBuffer(); lockedBytes = bytes;
             const doc = await window.pdfjsLib.getDocument({ data: new Uint8Array(bytes.slice(0)), worker: sharedWorker }).promise;
-            if (doc.numPages > LIM.pages) { errors.push(`“${f.name}” tem ${doc.numPages} páginas, acima do limite de ${LIM.pages} por PDF. Separe em partes menores e tente de novo.`); doc.destroy(); continue; }
-            S.files.set(id, { id, name: f.name, kind: "pdf", size: f.size, bytes, doc, n: doc.numPages });
-            for (let i = 0; i < doc.numPages; i++) { const p = { id: "p" + S.nid++, f: id, i, r: 0 }; S.pages.push(p); firstNew = firstNew || p; added++; }
+            const r = addPdf({ id, f, bytes, doc, errors });
+            if (!r) continue; firstNew = firstNew || r; added += r.count;
           } else {
             if (photoCount >= LIM.photos) { errors.push(`Limite de ${LIM.photos} fotos neste aparelho. “${f.name}” e as seguintes ficaram de fora.`); break; }
             const bmp = await createImageBitmap(f); const w = bmp.width, h = bmp.height; bmp.close();
@@ -74,7 +138,7 @@
           }
           totalBytes += f.size;
         } catch (e) {
-          if (e && (e.name === "PasswordException" || /password/i.test(e.message || ""))) errors.push(`“${f.name}”: este PDF tem senha e eu não consigo abrir. Remova a proteção no programa de origem e tente de novo.`);
+          if (isPasswordErr(e) && lockedBytes) { const r = addLocked({ id, f, bytes: lockedBytes }); firstNew = firstNew || r; added++; continue; }
           else if (isPdf(f)) errors.push(`Não consegui abrir “${f.name}”. O arquivo pode estar danificado.`);
           else errors.push(`Não consegui abrir a foto “${f.name}”. Tente salvá-la como JPG ou PNG.`);
         }
@@ -85,6 +149,7 @@
     if (errors.length) showAlert(errors);
     render();
     if (added) {
+      const lk = lockedCount(S.pages); if (lk) { const h = $("#hint"); h.textContent = lk === 1 ? "Um PDF tem senha: toque nele (cadeado) para desbloquear." : `${lk} PDFs têm senha: toque em cada cadeado para desbloquear.`; h.hidden = false; }
       say(`${added} ${added === 1 ? "página adicionada" : "páginas adicionadas"}. ${S.pages.length} na mesa.`);
       const b = $(`.sel[data-id="${firstNew.id}"]`); if (b) b.focus({ preventScroll: false });
       applyIntent();
@@ -163,7 +228,7 @@
 
   async function drawPage(p, maxSide, canvas) {
     const ctx = canvas.getContext("2d");
-    if (p.blank) { canvas.width = Math.round(maxSide * .707); canvas.height = maxSide; ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height); return; }
+    if (p.blank || p.lock) { canvas.width = Math.round(maxSide * .707); canvas.height = maxSide; ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height); return; }
     const f = fileOf(p);
     if (f.kind === "pdf") {
       const page = await f.doc.getPage(p.i + 1), rot = (page.rotate + p.r) % 360;
@@ -186,7 +251,8 @@
 
   /* ---------- Desenho da mesa ---------- */
   const ICON = { check: '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>', zoom: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M16 16l5 5M11 8.5v5M8.5 11h5"/></svg>', grip: '<svg viewBox="0 0 24 24"><path d="M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01" stroke-width="3.2"/></svg>' };
-  const label = (p, pos, sel) => `Página ${pos} de ${S.pages.length}, ${p.blank ? "em branco" : fileOf(p).name + (fileOf(p).kind === "pdf" ? ", página " + (p.i + 1) + " do arquivo" : "")}${p.r ? ", girada " + p.r + " graus" : ""}${sel ? ", selecionada" : ""}`;
+  const LOCKED = '<svg class="lock-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg><span class="lock-msg">PDF não disponível<br>Toque para desbloquear</span>';
+  const label = (p, pos, sel) => `Página ${pos} de ${S.pages.length}, ${p.blank ? "em branco" : p.lock ? fileOf(p).name + ", PDF com senha, não disponível. Ative para desbloquear" : fileOf(p).name + (fileOf(p).kind === "pdf" ? ", página " + (p.i + 1) + " do arquivo" : "")}${p.r ? ", girada " + p.r + " graus" : ""}${sel ? ", selecionada" : ""}`;
 
   function render() {
     const n = S.pages.length, has = n > 0 || S.undo.length > 0;
@@ -199,12 +265,12 @@
       const sel = S.sel.has(p.id), u = thumbCache.get(key(p)), f = p.blank ? null : fileOf(p);
       return `<li data-id="${p.id}"><div class="pg">
         <button class="sel" type="button" data-id="${p.id}" aria-pressed="${sel}" aria-label="${esc(label(p, k + 1, sel))}" tabindex="${p.id === S.focusId ? 0 : -1}">
-          <span class="thumb">${u ? `<img alt="" draggable="false" src="${u}">` : '<span class="ph"></span><img alt="" draggable="false">'}</span>
+          <span class="thumb${p.lock ? " locked" : ""}">${p.lock ? LOCKED : u ? `<img alt="" draggable="false" src="${u}">` : '<span class="ph"></span><img alt="" draggable="false">'}</span>
           <span class="chk" aria-hidden="true">${ICON.check}</span></button>
         <button class="zoom" type="button" data-id="${p.id}" aria-label="Ampliar página ${k + 1}" tabindex="-1">${ICON.zoom}</button>
         <button class="handle" type="button" data-id="${p.id}" aria-label="Arrastar página ${k + 1}" tabindex="-1">${ICON.grip}</button>
         <span class="num" aria-hidden="true">${k + 1}</span>
-        <span class="nm" aria-hidden="true">${p.blank ? "Página em branco" : esc(f.name) + (f.kind === "pdf" ? " · p. " + (p.i + 1) : "")}</span></div></li>`;
+        <span class="nm" aria-hidden="true">${p.blank ? "Página em branco" : esc(f.name) + (f.kind === "pdf" && !p.lock ? " · p. " + (p.i + 1) : "")}</span></div></li>`;
     }).join("");
     if (io) $$(".thumb", grid).forEach(t => { if (!t.querySelector(".ph")) return; io.observe(t); });
     updateUI();
@@ -232,7 +298,7 @@
     return { ok: true, pages: S.pages.slice() };
   }
   function estimate(pages) {
-    let b = 0; const per = {}; pages.forEach(p => { if (p.blank) { b += 1500; return; } const f = fileOf(p); if (f.kind === "img") b += prefs.quality === "original" ? Math.min(f.size, 2.5 * MB) : Math.min(f.size, 350 * 1024); else per[f.id] = (per[f.id] || 0) + 1; });
+    let b = 0; const per = {}; pages.forEach(p => { if (p.blank) { b += 1500; return; } if (p.lock) return; const f = fileOf(p); if (f.kind === "img") b += prefs.quality === "original" ? Math.min(f.size, 2.5 * MB) : Math.min(f.size, 350 * 1024); else per[f.id] = (per[f.id] || 0) + 1; });
     Object.entries(per).forEach(([id, c]) => { const f = S.files.get(id); b += f.size * (c / f.n); }); return b;
   }
   function defaultName() {
@@ -256,7 +322,8 @@
     const hasImg = S.pages.some(p => !p.blank && fileOf(p).kind === "img"); $("#imgopts").hidden = !hasImg;
     $("#qualhint").textContent = coarse ? "Neste aparelho, fotos grandes são reduzidas para o navegador não travar." : "";
     const l = exportList(); const cnt = l.ok ? l.pages.length : 0;
-    const msg = n ? (l.ok ? `${cnt} ${n1(cnt, "página", "páginas")} · cerca de ${fmt(estimate(l.pages))}` : "") : "";
+    const lkn = l.ok ? lockedCount(l.pages) : 0;
+    const msg = n ? (l.ok ? `${cnt} ${n1(cnt, "página", "páginas")} · cerca de ${fmt(estimate(l.pages))}${lkn ? ` · ${lkn} com senha` : ""}` : "") : "";
     $("#summary").textContent = msg; $("#barsum").textContent = msg;
     const rh = $("#rangehint"); if (what() === "range") { rh.textContent = l.ok ? `Vai exportar ${cnt} ${n1(cnt, "página", "páginas")}: ${(parseRange($("#range").value, n).idx || []).map(i => i + 1).join(", ")}` : l.error; rh.style.color = l.ok ? "" : "var(--danger)"; $("#range").setAttribute("aria-invalid", !l.ok); }
     if (!nameTouched) $("#fname").value = defaultName();
@@ -275,9 +342,9 @@
 
   $("#pgrid").addEventListener("click", e => {
     if (suppressClick) { suppressClick = false; return; }
-    const z = e.target.closest(".zoom"); if (z) { openZoom(z.dataset.id, z); return; }
+    const z = e.target.closest(".zoom"); if (z) { const zp = byId(z.dataset.id); if (zp && zp.lock) openUnlock(zp.id, z); else openZoom(z.dataset.id, z); return; }
     if (e.target.closest(".handle")) return;
-    const s = e.target.closest(".sel"); if (s) toggle(s.dataset.id, e.shiftKey);
+    const s = e.target.closest(".sel"); if (s) { const sp = byId(s.dataset.id); if (sp && sp.lock && !e.shiftKey) openUnlock(sp.id, s); else toggle(s.dataset.id, e.shiftKey); }
   });
   $("#pgrid").addEventListener("keydown", e => {
     const s = e.target.closest(".sel"); if (!s) return; const id = s.dataset.id, i = idx(id);
@@ -373,6 +440,15 @@
     const blob = await new Promise(r => c.toBlob(r, png ? "image/png" : "image/jpeg", q === "original" ? .95 : .85));
     return { bytes: new Uint8Array(await blob.arrayBuffer()), png, w, h };
   }
+  async function rasterPage(f, p) {
+    const page = await f.doc.getPage(p.i + 1), rot = (page.rotate + p.r) % 360, base = page.getViewport({ scale: 1, rotation: rot });
+    const sc = Math.min(2, (coarse ? 1600 : 2400) / Math.max(base.width, base.height)), vp = page.getViewport({ scale: sc, rotation: rot });
+    const c = document.createElement("canvas"); c.width = Math.ceil(vp.width); c.height = Math.ceil(vp.height);
+    const ctx = c.getContext("2d"); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);
+    await page.render({ canvasContext: ctx, viewport: vp }).promise; page.cleanup();
+    const blob = await new Promise(r => c.toBlob(r, "image/jpeg", .88)); c.width = c.height = 0;
+    return { bytes: new Uint8Array(await blob.arrayBuffer()), w: base.width, h: base.height };
+  }
   const tick = () => new Promise(r => setTimeout(r, 0));
   async function build(list, onProgress) {
     const { PDFDocument, degrees } = window.PDFLib, out = await PDFDocument.create(), srcs = new Map(); let last = null;
@@ -382,8 +458,11 @@
       if (p.blank) { const sz = last ? [last.getWidth(), last.getHeight()] : A4; last = out.addPage(sz); }
       else {
         const f = fileOf(p);
-        if (f.kind === "pdf") {
-          let src = srcs.get(f.id); if (!src) { src = await PDFDocument.load(f.bytes, { updateMetadata: false }); srcs.set(f.id, src); }
+        if (f.kind === "pdf" && f.password) {   // PDF que tinha senha: vai como imagem de cada página
+          const im = await rasterPage(f, p), emb = await out.embedJpg(im.bytes), page = out.addPage([im.w, im.h]);
+          page.drawImage(emb, { x: 0, y: 0, width: im.w, height: im.h }); last = page;
+        } else if (f.kind === "pdf") {
+          let src = srcs.get(f.id); if (!src) { src = await PDFDocument.load(f.bytes, f.password ? { password: f.password, updateMetadata: false } : { updateMetadata: false }); srcs.set(f.id, src); }
           const [cp] = await out.copyPages(src, [p.i]); cp.setRotation(degrees(((cp.getRotation().angle + p.r) % 360 + 360) % 360)); out.addPage(cp); last = cp;
         } else {
           const im = await prepImage(f, prefs.quality), emb = im.png ? await out.embedPng(im.bytes) : await out.embedJpg(im.bytes);
@@ -417,6 +496,8 @@
   async function doExport() {
     if (S.busy) return; const l = exportList();
     if (!l.ok) { showAlert(l.error); $("#range").focus(); return; } if (!l.pages.length) { showAlert("Não há páginas para exportar."); return; }
+    const lk = lockedCount(l.pages);
+    if (lk) { showAlert(lk === 1 ? "Há um PDF com senha na mesa. Toque no cadeado para desbloquear (ou remova-o) antes de baixar." : `Há ${lk} PDFs com senha na mesa. Desbloqueie (toque no cadeado) ou remova antes de baixar.`); const b = $(".thumb.locked"); if (b) b.closest(".sel").focus(); return; }
     hideAlert(); S.cancel = false; S.busy = true; document.body.setAttribute("aria-busy", "true"); updateUI();
     $("#progwrap").hidden = false; $("#cancel").hidden = false; const prog = $("#prog"); prog.value = 0; say("Gerando o PDF");
     try {
