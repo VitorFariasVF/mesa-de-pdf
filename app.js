@@ -273,7 +273,7 @@
   /* ---------- Desenho da mesa ---------- */
   const ICON = { check: '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>', zoom: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M16 16l5 5M11 8.5v5M8.5 11h5"/></svg>', grip: '<svg viewBox="0 0 24 24"><path d="M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01" stroke-width="3.2"/></svg>' };
   const LOCKED = '<svg class="lock-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg><span class="lock-msg">PDF não disponível<br>Toque para desbloquear</span>';
-  const label = (p, pos, sel) => `Página ${pos} de ${S.pages.length}, ${p.blank ? "em branco" : p.lock ? fileOf(p).name + ", PDF com senha, não disponível. Ative para desbloquear" : fileOf(p).name + (fileOf(p).kind === "pdf" ? ", página " + (p.i + 1) + " do arquivo" : "")}${p.r ? ", girada " + p.r + " graus" : ""}${sel ? ", selecionada" : ""}`;
+  const label = (p, pos, sel) => `Página ${pos} de ${S.pages.length}, ${p.blank ? "em branco" : p.lock ? fileOf(p).name + ", PDF com senha, não disponível. Ative para desbloquear" : fileOf(p).name + (fileOf(p).kind === "pdf" ? ", página " + (p.i + 1) + " do arquivo" : "")}${p.r ? ", girada " + p.r + " graus" : ""}${p.crop ? ", cortada" : ""}${p.sig ? ", assinada" : ""}${sel ? ", selecionada" : ""}`;
 
   function render() {
     const n = S.pages.length, has = n > 0 || S.undo.length > 0;
@@ -290,7 +290,7 @@
           <span class="chk" aria-hidden="true">${ICON.check}</span></button>
         <button class="zoom" type="button" data-id="${p.id}" aria-label="Ampliar página ${k + 1}" tabindex="-1">${ICON.zoom}</button>
         <button class="handle" type="button" data-id="${p.id}" aria-label="Arrastar página ${k + 1}" tabindex="-1">${ICON.grip}</button>
-        <span class="num" aria-hidden="true">${k + 1}</span>
+        <span class="num" aria-hidden="true">${k + 1}</span>${p.crop || p.sig ? `<span class="tag" aria-hidden="true">${[p.crop ? "cortada" : "", p.sig ? "assinada" : ""].filter(Boolean).join(" · ")}</span>` : ""}
         <span class="nm" aria-hidden="true">${p.blank ? "Página em branco" : esc(f.name) + (f.kind === "pdf" && !p.lock ? " · p. " + (p.i + 1) : "")}</span></div></li>`;
     }).join("");
     if (io) $$(".thumb", grid).forEach(t => { if (!t.querySelector(".ph")) return; io.observe(t); });
@@ -555,7 +555,7 @@
     if (S.pages.length && !confirm("Começar de novo? As páginas que estão na mesa serão descartadas.")) return;
     S.pages = []; S.sel.clear(); S.undo = []; S.redo = []; S.files.forEach(f => { if (f.doc) f.doc.destroy(); }); S.files.clear(); totalBytes = 0; thumbCache.forEach(u => URL.revokeObjectURL(u)); thumbCache.clear(); S.exported = false; nameTouched = false; setWhat("all"); $("#range").value = ""; $("#hint").hidden = true; hideAlert(); render(); say("Mesa limpa."); $("#pick").focus();
   };
-  $("#resetdata").onclick = () => { if (confirm("Isso remove as preferências desta ferramenta neste navegador. Continuar?")) { T.clear(); Object.assign(prefs, { size: "a4", margin: "small", quality: "reduced" }); ["psize", "pmargin", "pqual"].forEach(id => { $("#" + id).value = prefs[{ psize: "size", pmargin: "margin", pqual: "quality" }[id]]; }); T.toast("Dados apagados."); } };
+  $("#resetdata").onclick = () => { if (confirm("Isso remove as preferências desta ferramenta neste navegador (tamanho, margem, qualidade, compressão, marca d’água e numeração). Continuar?")) { T.clear(); Object.assign(prefs, { size: "a4", margin: "small", quality: "reduced", comp: "none" }); if (core.hooks.resetPrefs) core.hooks.resetPrefs(); ["psize", "pmargin", "pqual"].forEach(id => { $("#" + id).value = prefs[{ psize: "size", pmargin: "margin", pqual: "quality" }[id]]; }); T.toast("Dados apagados."); } };
   $("#y").textContent = new Date().getFullYear();
 
   /* Soltar arquivos em qualquer lugar da página */

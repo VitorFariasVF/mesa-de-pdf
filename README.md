@@ -12,9 +12,12 @@ Parte do [VF Tools](https://vitorfariasvf.github.io/VF-Tools/). Segue o [padrão
 - **Comprimir:** Leve, Média ou Forte. As páginas dos PDFs viram imagens JPEG menores (o texto deixa de ser selecionável).
 - **Marca d’água e carimbo:** texto (Confidencial, Rascunho, Aprovado…) ou imagem, com cor, tamanho, opacidade, ângulo, posição e contorno estilo carimbo, em todas as páginas.
 - **Numerar páginas:** “Página X de Y”, “X / Y”, “X” ou “- X -”, seis posições, número inicial e opção de não numerar a capa.
-- **Assinar:** desenhe, digite ou envie uma imagem da assinatura e posicione na página (arrastando ou pelos controles). Vale uma página ou todas. A assinatura fica só na memória do navegador.
-- **Cortar:** remova margens das páginas selecionadas (ou de todas), com prévia da área que será cortada.
+- **Assinar:** desenhe, digite ou envie uma imagem da assinatura e posicione na página (arrastando ou pelos controles). Vale uma página ou todas. É uma imagem colada no PDF, não uma assinatura digital certificada. Ela fica só na memória do navegador.
+- **Cortar:** remova margens das páginas selecionadas (ou de todas), com prévia. **Atenção:** o corte só esconde as bordas; o conteúdo cortado continua dentro do arquivo. Não use para ocultar dados sensíveis.
 - **Preferências** (tamanho, margem e qualidade) ficam no `localStorage`. Os arquivos nunca.
+
+## Privacidade
+Os arquivos e as senhas nunca são enviados nem guardados. Só as preferências (tamanho, margem, qualidade, compressão, marca d’água e numeração) ficam no `localStorage`, e “Limpar meus dados” apaga tudo isso. Ao abrir a página, o navegador baixa o CSS e o JavaScript compartilhados do VF Tools (vitorfariasvf.github.io); depois de carregada, a ferramenta funciona sem internet.
 
 ## PDFs com senha
 Um PDF protegido entra na mesa como um card com cadeado (“PDF não disponível”). Toque nele, digite a senha no modal e as páginas aparecem no mesmo lugar. Enquanto houver cadeado na mesa o download fica bloqueado (desbloqueie ou remova). A senha só é usada no navegador e não é guardada. Páginas de PDFs desbloqueados são exportadas como imagem, então o texto deixa de ser selecionável.

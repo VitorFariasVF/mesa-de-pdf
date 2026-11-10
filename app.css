@@ -23,7 +23,7 @@
 .toolbar .mvto{display:flex;align-items:center;gap:var(--s2);color:var(--muted);font-size:.85rem}
 .toolbar input[type=number]{width:72px;min-height:44px;padding:0 var(--s2);font:inherit;color:var(--text);background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md)}
 .toolbar .btn[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
-.toolbar .btn:disabled{opacity:.4;cursor:not-allowed}
+.toolbar .btn:disabled{opacity:.55;border-style:dashed;cursor:not-allowed}
 .count{margin:var(--s3) 0;color:var(--muted);font-size:.9rem;min-height:1.4em}
 .hint-box{margin:0 0 var(--s3);padding:var(--s3) var(--s4);border:1px solid var(--line);border-radius:var(--r-md);color:var(--muted);font-size:.92rem}
 .keys{font-size:.8rem;margin-top:var(--s4)}
@@ -118,7 +118,7 @@ progress{width:100%;height:10px;accent-color:var(--accent);margin-bottom:var(--s
 .fxstate{font-size:.8rem;color:var(--accent);margin-left:var(--s2)}
 .fx .hint{display:block;margin-top:var(--s1)}
 /* Diálogos dos extras */
-.xdlg{width:min(94vw,820px);max-height:94vh;overflow:auto;padding:var(--s5);border:1px solid var(--accent);border-radius:var(--r-lg,16px);background:var(--surface);color:var(--text)}
+.xdlg{width:min(94vw,820px);max-height:94vh;max-height:94dvh;overflow:auto;padding:var(--s5);border:1px solid var(--accent);border-radius:var(--r-lg,16px);background:var(--surface);color:var(--text)}
 .xdlg::backdrop{background:rgba(8,6,4,.78)}
 .xdlg h2{font-family:var(--font-display);font-size:var(--fs-xl,1.4rem);margin:0 0 var(--s2)}
 .xgrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--s5);align-items:start}
@@ -144,3 +144,30 @@ progress{width:100%;height:10px;accent-color:var(--accent);margin-bottom:var(--s
 .sg-stage canvas{max-width:100%;height:auto}
 .sg-ghost{position:absolute;cursor:grab;outline:2px dashed var(--accent);outline-offset:2px;touch-action:none;user-select:none;-webkit-user-drag:none}
 .sg-ghost:focus-visible{outline:3px solid var(--accent)}
+
+/* ---- Rodada de validação UX/UI ---- */
+.xdlg .udlg-actions{position:sticky;bottom:0;margin:var(--s4) calc(var(--s5)*-1) calc(var(--s5)*-1);padding:var(--s3) var(--s5);background:var(--surface);border-top:1px solid var(--line);z-index:2}
+.xrow{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--s3)}
+.xdlg .xgrid{margin-bottom:var(--s3)}
+.xdlg p.muted{font-size:.9rem;margin:0 0 var(--s3)}
+.warn-box{margin:0 0 var(--s3);padding:var(--s3);border:1px solid var(--warn);border-radius:var(--r-md);background:transparent;color:var(--text);font-size:.9rem}
+.warn-box strong{color:var(--warn)}
+.xdlg input[type=range]{min-height:44px}
+.xdlg input[type=radio],.xdlg input[type=checkbox],.udlg input[type=checkbox]{width:22px;height:22px;accent-color:var(--accent)}
+.xdlg .field input,.xdlg .field select,.chipbtn,.fx select,.fx .btn,.xdlg .btn:not(.primary){border-color:var(--muted)}
+.field.inline select{width:auto;flex:0 1 160px}.field.inline label{margin:0}
+.chipbtn{min-height:44px;font-size:.9rem}
+.fx .btn[aria-pressed=true]{border-color:var(--accent)}
+.fxsum{margin:0 0 var(--s3);font-size:.85rem;color:var(--accent)}
+.sg-ghost:focus-visible{outline:3px solid #000;box-shadow:0 0 0 6px #fff}
+.sg-ghost{min-width:44px;min-height:20px}
+.pg .tag{align-self:flex-start;padding:2px var(--s2);font-size:.7rem;border-radius:var(--r-pill);background:var(--bg);color:var(--accent);border:1px solid var(--accent);pointer-events:none}
+#fxjump{display:none}
+@media(max-width:979px){#fxjump{display:inline-flex}.exportbar{gap:var(--s2)}.exportbar #barsum{flex:1;min-width:0}}
+@media(max-width:700px){.xprev canvas{max-height:38vh;width:auto}.sg-stage canvas{max-height:46vh;width:auto}.xrow{grid-template-columns:minmax(0,1fr)}}
+/* telas baixas ou de toque: a barra de ferramentas rola de lado e não fica fixa */
+@media(max-height:500px),(pointer:coarse){
+  .toolbar{position:static;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 36px),transparent);mask-image:linear-gradient(to right,#000 calc(100% - 36px),transparent)}
+  .toolbar::-webkit-scrollbar{display:none}.toolbar .btn,.toolbar .mvto,.toolbar .sep{flex:none}
+}
+@media(prefers-reduced-motion:reduce){.btn,.chipbtn{transition:none}}

@@ -52,6 +52,8 @@
   };
 
   /* ================= marca d'água ================= */
+  const flag = (el, err, msg) => { err.textContent = msg; err.hidden = false; if (el) { el.setAttribute("aria-invalid", "true"); el.setAttribute("aria-describedby", err.id); el.focus(); } };
+  const unflag = (...els) => els.forEach(el => { if (el) { el.removeAttribute("aria-invalid"); } });
   const wd = $("#wmdlg"), W = {};
   ["text", "color", "box", "size", "op", "angle", "pos", "file", "fname", "prev", "err", "sizel", "sizeo", "opo", "textbox", "imgbox"].forEach(k => { W[k] = $("#wm-" + k); });
   const wmType = () => (document.querySelector("input[name=wmtype]:checked") || {}).value || "text";
@@ -83,8 +85,8 @@
   });
   $("#wm-form").addEventListener("submit", e => {
     e.preventDefault(); const v = wmRead(); W.err.hidden = true;
-    if (v.type === "text") { if (!v.text) { W.err.textContent = "Digite o texto da marca d’água."; W.err.hidden = false; W.text.focus(); return; } if (!LATIN.test(v.text)) { W.err.textContent = "O PDF só aceita letras, números e acentos comuns neste texto (sem emojis ou símbolos especiais)."; W.err.hidden = false; W.text.focus(); return; } }
-    else if (!wmImg) { W.err.textContent = "Escolha uma imagem PNG ou JPG."; W.err.hidden = false; W.file.focus(); return; }
+    if (v.type === "text") { unflag(W.text, W.file); if (!v.text) { flag(W.text, W.err, "Digite o texto da marca d’água."); return; } if (!LATIN.test(v.text)) { flag(W.text, W.err, "Esta marca aceita apenas letras, números e acentos comuns (sem emojis ou símbolos especiais)."); return; } }
+    else if (!wmImg) { flag(W.file, W.err, "Escolha uma imagem PNG ou JPG."); return; }
     Object.assign(prefs.wm, v); savePrefs(); wd.close(); S.exported = false; C.updateUI(); C.render(); say("Marca d’água ativada. Ela entra em todas as páginas ao baixar.");
   });
   $("#wm-off").addEventListener("click", () => { prefs.wm.on = false; savePrefs(); wd.close(); C.updateUI(); say("Marca d’água desativada."); });
@@ -116,7 +118,7 @@
     ctx.strokeStyle = "#f0b254"; ctx.lineWidth = 2; ctx.strokeRect(c.l * w, c.t * h, w * (1 - c.l - c.r), h * (1 - c.t - c.b));
   }
   $("#crop").addEventListener("click", async e => {
-    const t = targetPages(); if (!t.length) { say("Adicione páginas antes de cortar."); return; }
+    const t = targetPages(); if (!t.length) { C.showAlert("Adicione páginas à mesa para cortar."); return; }
     cropPage = t[0]; const sel = S.pages.some(p => S.sel.has(p.id) && !p.lock);
     $("#crop-for").textContent = sel ? `Vale para ${t.length} ${t.length === 1 ? "página selecionada" : "páginas selecionadas"}.` : `Nenhuma página selecionada: vale para todas (${t.length}).`;
     const cur = cropPage.crop ? rotCrop(cropPage.crop, pageRot(cropPage)) : { t: 0, r: 0, b: 0, l: 0 };
@@ -126,7 +128,7 @@
   for (const k of "trbl") CR.r[k].addEventListener("input", () => { if (CR.link.checked) for (const j of "trbl") CR.r[j].value = CR.r[k].value; crShow(); crPaint(); });
   $("#crop-form").addEventListener("submit", e => {
     e.preventDefault(); const d = crVals(), targets = targetPages(), none = !(d.t || d.r || d.b || d.l);
-    if (d.t + d.b >= .9 || d.l + d.r >= .9) { say("O corte é grande demais."); return; }
+    if (d.t + d.b >= .9 || d.l + d.r >= .9) { C.showAlert("Corte grande demais: deixe pelo menos 10% de cada dimensão da página."); cd.close(); return; }
     mutate(none ? "Remover corte" : "Cortar páginas", () => targets.forEach(p => { if (none) delete p.crop; else p.crop = rotCrop(d, (360 - pageRot(p)) % 360); }), none ? "Corte removido." : `Corte aplicado em ${targets.length} ${targets.length === 1 ? "página" : "páginas"}.`);
     cd.close();
   });
@@ -170,11 +172,11 @@
     ctx.putImageData(im, 0, 0);
   }
   function makeSig() {
-    SG.err.hidden = true; const m = sgMode(); let src = null;
-    if (m === "draw") { if (!drawn) { SG.err.textContent = "Desenhe a assinatura na área acima."; SG.err.hidden = false; return null; } src = pad; }
-    else if (m === "type") { if (!$("#sg-name").value.trim()) { SG.err.textContent = "Digite seu nome."; SG.err.hidden = false; $("#sg-name").focus(); return null; } src = $("#sg-typeprev"); }
-    else { if (!imgSig) { SG.err.textContent = "Escolha uma imagem."; SG.err.hidden = false; return null; } const cv = document.createElement("canvas"), k = Math.min(1, 900 / Math.max(imgSig.naturalWidth, imgSig.naturalHeight)); cv.width = Math.round(imgSig.naturalWidth * k); cv.height = Math.round(imgSig.naturalHeight * k); cv.getContext("2d").drawImage(imgSig, 0, 0, cv.width, cv.height); whiteToAlpha(cv); src = cv; }
-    const t = trimToPng(src); if (!t) { SG.err.textContent = "Não encontrei traços na assinatura."; SG.err.hidden = false; return null; }
+    SG.err.hidden = true; unflag(pad, $("#sg-name"), $("#sg-file")); const m = sgMode(); let src = null;
+    if (m === "draw") { if (!drawn) { flag(pad, SG.err, "Desenhe a assinatura na área acima."); return null; } src = pad; }
+    else if (m === "type") { if (!$("#sg-name").value.trim()) { flag($("#sg-name"), SG.err, "Digite seu nome."); return null; } src = $("#sg-typeprev"); }
+    else { if (!imgSig) { flag($("#sg-file"), SG.err, "Escolha uma imagem."); return null; } const cv = document.createElement("canvas"), k = Math.min(1, 900 / Math.max(imgSig.naturalWidth, imgSig.naturalHeight)); cv.width = Math.round(imgSig.naturalWidth * k); cv.height = Math.round(imgSig.naturalHeight * k); cv.getContext("2d").drawImage(imgSig, 0, 0, cv.width, cv.height); whiteToAlpha(cv); src = cv; }
+    const t = trimToPng(src); if (!t) { SG.err.textContent = "Não encontrei traços na assinatura. Use uma imagem com fundo claro e traço escuro."; SG.err.hidden = false; return null; }
     const id = sigId(), img = new Image(); img.src = t.url; const rec = { id, url: t.url, img, w: t.w, h: t.h }; S.sigs.set(id, rec); S.curSig = id; return rec;
   }
   function placePage() { return signPage && byId(signPage.id) ? signPage : null; }
@@ -218,7 +220,7 @@
   $("#sg-new").addEventListener("click", () => { $("#sg-make").hidden = false; $("#sg-place").hidden = true; padReset(); sgModeShow(); });
   $("#sg-use").addEventListener("click", async () => { const rec = makeSig(); if (!rec) return; $("#sg-make").hidden = true; $("#sg-place").hidden = false; if (!rec.img.complete) await new Promise(r => { rec.img.onload = r; }); placeLoad(); $("#sg-x").focus(); });
   $("#sign").addEventListener("click", e => {
-    const first = S.pages.find(p => S.sel.has(p.id) && !p.lock) || S.pages.find(p => !p.lock); if (!first) { say("Adicione páginas (desbloqueadas) antes de assinar."); return; }
+    const first = S.pages.find(p => S.sel.has(p.id) && !p.lock) || S.pages.find(p => !p.lock); if (!first) { C.showAlert("Adicione páginas à mesa (e desbloqueie os PDFs com senha) para assinar."); return; }
     signPage = first; D = null; openDlg(sd, e.currentTarget);
     if (S.curSig && S.sigs.get(S.curSig)) { $("#sg-make").hidden = true; $("#sg-place").hidden = false; placeLoad(); }
     else { $("#sg-make").hidden = false; $("#sg-place").hidden = true; padReset(); sgModeShow(); }
@@ -226,11 +228,25 @@
   sd.addEventListener("close", () => { drag = null; });
   window.addEventListener("resize", () => { if (sd.open && !$("#sg-place").hidden) placeSync(); });
 
+  document.querySelectorAll(".xdlg input[type=range]").forEach(r => { const upd = () => setTimeout(() => { const o = document.querySelector(`label[for="${r.id}"] output`); if (o) r.setAttribute("aria-valuetext", o.textContent); }, 0); r.addEventListener("input", upd); upd(); });
+  let kb = null; ghost.addEventListener("keyup", () => { clearTimeout(kb); kb = setTimeout(() => say(`Assinatura em ${$("#sg-x").value}% na horizontal, ${$("#sg-y").value}% na vertical, tamanho ${$("#sg-w").value}%.`), 400); });
+
   /* ================= estado dos botões ================= */
+  const short = (t, n) => t.length > n ? t.slice(0, n - 1) + "…" : t;
+  const POSN = { bc: "rodapé centro", br: "rodapé direita", bl: "rodapé esquerda", tc: "topo centro", tr: "topo direita", tl: "topo esquerda" };
+  C.hooks.resetPrefs = () => { Object.assign(prefs.wm, { on: false, type: "text", text: "CONFIDENCIAL", color: "gray", box: false, size: 64, op: 25, angle: 45, pos: "center" }); Object.assign(prefs.num, { on: false, fmt: "Página {n} de {t}", pos: "bc", size: 10, start: 1, skip: false }); wmImg = null; $("#pcomp").value = "none"; C.updateUI(); };
+  $("#fxjump").addEventListener("click", () => { const x = $("#export"); x.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion:reduce)").matches ? "auto" : "smooth", block: "start" }); const g = $("#pcomp"); setTimeout(() => g.focus({ preventScroll: true }), 350); });
   C.hooks.ui = () => {
     const any = S.pages.some(p => !p.lock);
     $("#sign").disabled = S.busy || !any; $("#crop").disabled = S.busy || !any;
-    for (const [id, on, label] of [["wm", prefs.wm.on, "ligada"], ["num", prefs.num.on, "ligada"]]) { $("#" + id + (id === "wm" ? "btn" : "btn")).setAttribute("aria-pressed", on); $("#" + id + "state").textContent = on ? label : ""; }
+    for (const [id, on, label] of [["wm", prefs.wm.on, "ligada"], ["num", prefs.num.on, "ligada"]]) { $("#" + id + (id === "wm" ? "btn" : "btn")).setAttribute("aria-pressed", on); }
+    const sel = S.pages.filter(p => S.sel.has(p.id) && !p.lock), tg = sel.length ? `${sel.length} selec.` : "todas";
+    $("#crop").textContent = `Cortar (${tg})`; $("#crop").setAttribute("aria-label", sel.length ? `Cortar bordas de ${sel.length} ${sel.length === 1 ? "página selecionada" : "páginas selecionadas"}` : "Cortar bordas de todas as páginas");
+    const sp = S.pages.find(p => S.sel.has(p.id) && !p.lock) || S.pages.find(p => !p.lock); $("#sign").textContent = sp ? `Assinar (pág. ${S.pages.indexOf(sp) + 1})` : "Assinar"; $("#sign").setAttribute("aria-label", sp ? `Assinar a página ${S.pages.indexOf(sp) + 1}` : "Assinar página");
+    $("#wmstate").textContent = prefs.wm.on ? "· " + (prefs.wm.type === "image" ? "imagem" : short(prefs.wm.text, 14)) : ""; $("#numstate").textContent = prefs.num.on ? "· " + POSN[prefs.num.pos] : "";
+    const bits = []; if (prefs.comp && prefs.comp !== "none") bits.push("compressão " + { light: "leve", medium: "média", strong: "forte" }[prefs.comp]); if (prefs.wm.on) bits.push("marca d’água"); if (prefs.num.on) bits.push("numeração");
+    const nc = S.pages.filter(p => p.crop).length, ns = S.pages.filter(p => p.sig).length; if (nc) bits.push(`corte em ${nc} pág.`); if (ns) bits.push(`assinatura em ${ns} pág.`);
+    const fs = $("#fxsum"); fs.hidden = !bits.length; fs.textContent = bits.length ? "Será aplicado ao baixar: " + bits.join(", ") + "." : "";
     $("#pcomp").disabled = S.busy; $("#wmbtn").disabled = S.busy; $("#numbtn").disabled = S.busy;
   };
 
