@@ -56,6 +56,8 @@
         <button id="rot" class="btn" type="button">Girar</button>
         <button id="dup" class="btn" type="button">Duplicar</button>
         <button id="blank" class="btn" type="button" aria-label="Inserir página em branco">Em branco</button>
+        <button id="sign" class="btn" type="button" aria-label="Assinar página">Assinar</button>
+        <button id="crop" class="btn" type="button" aria-label="Cortar bordas das páginas">Cortar</button>
         <button id="del" class="btn danger" type="button">Excluir</button>
         <span class="sep" aria-hidden="true"></span>
         <button id="mvb" class="btn" type="button" aria-label="Mover para trás">Para trás</button>
@@ -96,6 +98,16 @@
           <select id="pqual"><option value="reduced">Reduzida (arquivo menor)</option><option value="original">Original (arquivo maior)</option></select>
           <span id="qualhint" class="hint"></span></div>
       </div>
+      <fieldset class="fx" id="fx">
+        <legend>Ajustes no PDF</legend>
+        <div class="field"><label for="pcomp">Compressão</label>
+          <select id="pcomp"><option value="none">Nenhuma (original)</option><option value="light">Leve</option><option value="medium">Média</option><option value="strong">Forte</option></select>
+          <span id="comphint" class="hint">Comprimir transforma as páginas dos PDFs em imagens: o arquivo fica menor, mas o texto deixa de ser selecionável.</span></div>
+        <div class="fxbtns">
+          <button id="wmbtn" class="btn" type="button" aria-pressed="false">Marca d’água <span id="wmstate" class="fxstate"></span></button>
+          <button id="numbtn" class="btn" type="button" aria-pressed="false">Numerar páginas <span id="numstate" class="fxstate"></span></button>
+        </div>
+      </fieldset>
       <div class="field"><label for="fname">Nome do arquivo</label><input id="fname" autocomplete="off" spellcheck="false"></div>
       <div id="progwrap" hidden>
         <progress id="prog" max="100" value="0" aria-label="Progresso"></progress>
@@ -132,6 +144,106 @@
   </form>
 </dialog>
 
+
+<dialog id="wmdlg" class="xdlg" aria-labelledby="wm-t">
+  <form id="wm-form" novalidate>
+    <h2 id="wm-t">Marca d’água e carimbo</h2>
+    <p class="muted">Vale para todas as páginas que você baixar.</p>
+    <div class="xgrid">
+      <div class="xcol">
+        <fieldset class="seg"><legend>Tipo</legend>
+          <label><input type="radio" name="wmtype" value="text" checked> Texto</label>
+          <label><input type="radio" name="wmtype" value="image"> Imagem</label></fieldset>
+        <div id="wm-textbox">
+          <div class="field"><label for="wm-text">Texto</label><input id="wm-text" maxlength="40" autocomplete="off" spellcheck="false"></div>
+          <div class="chips" role="group" aria-label="Textos prontos"><button class="chipbtn" type="button" data-t="CONFIDENCIAL">Confidencial</button><button class="chipbtn" type="button" data-t="RASCUNHO">Rascunho</button><button class="chipbtn" type="button" data-t="APROVADO">Aprovado</button><button class="chipbtn" type="button" data-t="CÓPIA">Cópia</button><button class="chipbtn" type="button" data-t="URGENTE">Urgente</button></div>
+          <div class="field"><label for="wm-color">Cor</label><select id="wm-color"><option value="gray">Cinza</option><option value="red">Vermelho</option><option value="blue">Azul</option><option value="black">Preto</option></select></div>
+          <label class="check"><input id="wm-box" type="checkbox"> Contorno (estilo carimbo)</label>
+        </div>
+        <div id="wm-imgbox" hidden>
+          <div class="field"><label for="wm-file">Imagem (PNG ou JPG)</label><input id="wm-file" type="file" accept="image/png,image/jpeg"></div>
+          <p id="wm-fname" class="muted"></p>
+        </div>
+        <div class="field"><label for="wm-size"><span id="wm-sizel">Tamanho</span>: <output id="wm-sizeo"></output></label><input id="wm-size" type="range" min="12" max="160" step="2"></div>
+        <div class="field"><label for="wm-op">Opacidade: <output id="wm-opo"></output></label><input id="wm-op" type="range" min="5" max="100" step="5"></div>
+        <div class="field"><label for="wm-angle">Ângulo</label><select id="wm-angle"><option value="0">Horizontal</option><option value="45">Diagonal ↗</option><option value="-45">Diagonal ↘</option><option value="90">Vertical</option></select></div>
+        <div class="field"><label for="wm-pos">Posição</label><select id="wm-pos"><option value="center">Centro</option><option value="top">Topo</option><option value="bottom">Rodapé</option></select></div>
+      </div>
+      <div class="xprev"><canvas id="wm-prev" role="img" aria-label="Prévia da marca d’água na primeira página"></canvas></div>
+    </div>
+    <p id="wm-err" class="field-err" role="alert" hidden></p>
+    <div class="udlg-actions"><button id="wm-off" class="btn" type="button">Desativar</button><button id="wm-cancel" class="btn" type="button">Cancelar</button><button id="wm-ok" class="btn primary" type="submit">Ativar</button></div>
+  </form>
+</dialog>
+
+<dialog id="numdlg" class="xdlg" aria-labelledby="num-t">
+  <form id="num-form" novalidate>
+    <h2 id="num-t">Numerar páginas</h2>
+    <p class="muted">A numeração segue a ordem do PDF que você baixar.</p>
+    <div class="xgrid">
+      <div class="xcol">
+        <div class="field"><label for="num-fmt">Formato</label><select id="num-fmt"><option value="Página {n} de {t}">Página 1 de 10</option><option value="{n} / {t}">1 / 10</option><option value="{n}">1</option><option value="- {n} -">- 1 -</option></select></div>
+        <div class="field"><label for="num-pos">Posição</label><select id="num-pos"><option value="bc">Rodapé, centro</option><option value="br">Rodapé, direita</option><option value="bl">Rodapé, esquerda</option><option value="tc">Topo, centro</option><option value="tr">Topo, direita</option><option value="tl">Topo, esquerda</option></select></div>
+        <div class="field"><label for="num-size">Tamanho: <output id="num-sizeo"></output></label><input id="num-size" type="range" min="8" max="18" step="1"></div>
+        <div class="field"><label for="num-start">Começar em</label><input id="num-start" type="number" min="1" max="9999" inputmode="numeric"></div>
+        <label class="check"><input id="num-skip" type="checkbox"> Não numerar a primeira página (capa)</label>
+      </div>
+      <div class="xprev"><canvas id="num-prev" role="img" aria-label="Prévia da numeração na primeira página"></canvas></div>
+    </div>
+    <div class="udlg-actions"><button id="num-off" class="btn" type="button">Desativar</button><button id="num-cancel" class="btn" type="button">Cancelar</button><button id="num-ok" class="btn primary" type="submit">Ativar</button></div>
+  </form>
+</dialog>
+
+<dialog id="cropdlg" class="xdlg" aria-labelledby="crop-t">
+  <form id="crop-form" novalidate>
+    <h2 id="crop-t">Cortar bordas</h2>
+    <p id="crop-for" class="muted"></p>
+    <div class="xgrid">
+      <div class="xcol">
+        <label class="check"><input id="crop-link" type="checkbox" checked> Mesma medida nas 4 bordas</label>
+        <div class="field"><label for="crop-t-r">Topo: <output id="crop-t-o"></output></label><input id="crop-t-r" type="range" min="0" max="40" step="1"></div>
+        <div class="field"><label for="crop-r-r">Direita: <output id="crop-r-o"></output></label><input id="crop-r-r" type="range" min="0" max="40" step="1"></div>
+        <div class="field"><label for="crop-b-r">Base: <output id="crop-b-o"></output></label><input id="crop-b-r" type="range" min="0" max="40" step="1"></div>
+        <div class="field"><label for="crop-l-r">Esquerda: <output id="crop-l-o"></output></label><input id="crop-l-r" type="range" min="0" max="40" step="1"></div>
+      </div>
+      <div class="xprev"><canvas id="crop-prev" role="img" aria-label="Prévia do corte; a área escurecida será removida"></canvas></div>
+    </div>
+    <div class="udlg-actions"><button id="crop-off" class="btn" type="button">Remover corte</button><button id="crop-cancel" class="btn" type="button">Cancelar</button><button id="crop-ok" class="btn primary" type="submit">Aplicar corte</button></div>
+  </form>
+</dialog>
+
+<dialog id="signdlg" class="xdlg" aria-labelledby="sg-t">
+  <div id="sg-make">
+    <h2 id="sg-t">Sua assinatura</h2>
+    <p class="muted">Ela fica só neste navegador, enquanto a página estiver aberta.</p>
+    <fieldset class="seg"><legend>Como criar</legend>
+      <label><input type="radio" name="sgmode" value="draw" checked> Desenhar</label>
+      <label><input type="radio" name="sgmode" value="type"> Digitar</label>
+      <label><input type="radio" name="sgmode" value="img"> Enviar imagem</label></fieldset>
+    <div id="sg-draw"><canvas id="sg-pad" width="520" height="180" role="img" aria-label="Área para desenhar a assinatura com o dedo ou o mouse"></canvas>
+      <div class="field inline"><label for="sg-ink">Cor</label><select id="sg-ink"><option value="#111111">Preta</option><option value="#1d3fbf">Azul</option></select><button id="sg-clear" class="btn" type="button">Limpar</button></div></div>
+    <div id="sg-type" hidden><div class="field"><label for="sg-name">Seu nome</label><input id="sg-name" maxlength="40" autocomplete="off"></div><canvas id="sg-typeprev" width="520" height="140" role="img" aria-label="Prévia da assinatura digitada"></canvas></div>
+    <div id="sg-img" hidden><div class="field"><label for="sg-file">Imagem da assinatura (PNG ou JPG)</label><input id="sg-file" type="file" accept="image/png,image/jpeg"></div><canvas id="sg-imgprev" width="520" height="140" role="img" aria-label="Prévia da imagem"></canvas></div>
+    <p id="sg-err" class="field-err" role="alert" hidden></p>
+    <div class="udlg-actions"><button id="sg-cancel" class="btn" type="button">Cancelar</button><button id="sg-use" class="btn primary" type="button">Usar esta assinatura</button></div>
+  </div>
+  <div id="sg-place" hidden>
+    <h2 id="sg-pt">Posicionar assinatura</h2>
+    <p id="sg-where" class="muted"></p>
+    <div class="xgrid">
+      <div class="xcol">
+        <div class="field"><label for="sg-x">Posição horizontal: <output id="sg-xo"></output></label><input id="sg-x" type="range" min="0" max="100" step="1"></div>
+        <div class="field"><label for="sg-y">Posição vertical: <output id="sg-yo"></output></label><input id="sg-y" type="range" min="0" max="100" step="1"></div>
+        <div class="field"><label for="sg-w">Tamanho: <output id="sg-wo"></output></label><input id="sg-w" type="range" min="5" max="70" step="1"></div>
+        <p class="muted">Arraste a assinatura na página ou use os controles. Com a assinatura em foco, as setas movem e + / − mudam o tamanho.</p>
+        <div class="udlg-actions left"><button id="sg-prev" class="btn" type="button">Página anterior</button><button id="sg-next" class="btn" type="button">Próxima página</button></div>
+      </div>
+      <div class="xprev"><div id="sg-stage" class="sg-stage"><canvas id="sg-page" role="img" aria-label="Página para assinar"></canvas><img id="sg-ghost" class="sg-ghost" alt="Assinatura (arraste para mover)" tabindex="0" draggable="false"></div></div>
+    </div>
+    <div class="udlg-actions"><button id="sg-new" class="btn" type="button">Outra assinatura</button><button id="sg-rm" class="btn" type="button">Remover desta página</button><button id="sg-all" class="btn" type="button">Aplicar em todas</button><button id="sg-apply" class="btn primary" type="button">Aplicar nesta página</button><button id="sg-done" class="btn" type="button">Concluir</button></div>
+  </div>
+</dialog>
+
 <p id="live" class="sr-only" aria-live="polite"></p>
 <input id="file" type="file" multiple hidden aria-label="Escolher arquivos PDF ou fotos" tabindex="-1">
 
@@ -151,5 +263,6 @@
 <script src="https://vitorfariasvf.github.io/VF-Tools/help.js"></script>
 <script src="https://vitorfariasvf.github.io/VF-Tools/motion.js"></script>
 <script src="app.js"></script>
+<script src="extras.js"></script>
 </body>
 </html>

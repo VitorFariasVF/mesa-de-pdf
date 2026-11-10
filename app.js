@@ -8,13 +8,14 @@
   const coarse = matchMedia("(pointer:coarse)").matches || innerWidth < 700;
   const LIM = { file: 50 * MB, total: 150 * MB, pages: 200, photos: coarse ? 30 : 60 };
   const reduce = () => matchMedia("(prefers-reduced-motion:reduce)").matches;
-  const prefs = Object.assign({ size: "a4", margin: "small", quality: "reduced" }, T.get("prefs", {}));
+  const prefs = Object.assign({ size: "a4", margin: "small", quality: "reduced", comp: "none" }, T.get("prefs", {}));
   const savePrefs = () => T.set("prefs", prefs);
   const fmt = b => b >= MB ? (b / MB).toFixed(b >= 10 * MB ? 0 : 1).replace(".", ",") + " MB" : Math.max(1, Math.round(b / 1024)) + " KB";
 
   /* ---------- Estado ---------- */
-  const S = { files: new Map(), pages: [], sel: new Set(), undo: [], redo: [], nid: 1, intent: "", reorder: false, busy: false, anchor: null, focusId: null, exported: false, cancel: false };
+  const S = { sigs: new Map(), files: new Map(), pages: [], sel: new Set(), undo: [], redo: [], nid: 1, intent: "", reorder: false, busy: false, anchor: null, focusId: null, exported: false, cancel: false };
   let totalBytes = 0;
+  const core = { hooks: {} };   // ganchos para extras.js (assinar, cortar, marca d'água, numeração)
   const byId = id => S.pages.find(p => p.id === id);
   const idx = id => S.pages.findIndex(p => p.id === id);
   const fileOf = p => S.files.get(p.f);
@@ -227,6 +228,21 @@
   const canvasToUrl = c => new Promise(r => c.toBlob(b => r(URL.createObjectURL(b)), "image/jpeg", .82));
 
   async function drawPage(p, maxSide, canvas) {
+    await drawBase(p, maxSide, canvas);
+    if (p.sig) paintSig(canvas, p);   // a assinatura é desenhada antes do corte: a posição vale para a página inteira
+    if (p.crop) cropCanvas(canvas, p);
+  }
+  function paintSig(canvas, p) {
+    const sg = S.sigs.get(p.sig.s); if (!sg || !sg.img || !sg.img.complete) return;
+    const r = pageRot(p), ctx = canvas.getContext("2d"), cw = canvas.width, ch = canvas.height, bw = r % 180 ? ch : cw, wpx = p.sig.w * bw, hpx = wpx * sg.h / sg.w, [dx, dy] = baseToDisp(p.sig.x, p.sig.y, r);
+    ctx.save(); ctx.translate(dx * cw, dy * ch); ctx.rotate(r * Math.PI / 180); ctx.drawImage(sg.img, -wpx / 2, -hpx / 2, wpx, hpx); ctx.restore();
+  }
+  function cropCanvas(canvas, p) {
+    const c = rotCrop(p.crop, pageRot(p)), w = canvas.width, h = canvas.height, sx = Math.round(c.l * w), sy = Math.round(c.t * h), sw = Math.max(1, Math.round(w * (1 - c.l - c.r))), sh = Math.max(1, Math.round(h * (1 - c.t - c.b)));
+    const tmp = document.createElement("canvas"); tmp.width = sw; tmp.height = sh; tmp.getContext("2d").drawImage(canvas, sx, sy, sw, sh, 0, 0, sw, sh);
+    canvas.width = sw; canvas.height = sh; canvas.getContext("2d").drawImage(tmp, 0, 0);
+  }
+  async function drawBase(p, maxSide, canvas) {
     const ctx = canvas.getContext("2d");
     if (p.blank || p.lock) { canvas.width = Math.round(maxSide * .707); canvas.height = maxSide; ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height); return; }
     const f = fileOf(p);
@@ -241,7 +257,12 @@
       ctx.save(); ctx.translate(canvas.width / 2, canvas.height / 2); ctx.rotate(p.r * Math.PI / 180); ctx.drawImage(bmp, -w / 2, -h / 2, w, h); ctx.restore(); bmp.close();
     }
   }
-  const key = p => p.blank ? "blank" : `${p.f}:${p.i}:${p.r}`;
+  /* Geometria: corte e assinatura são guardados na orientação "base" da página (sem a rotação do usuário) */
+  const rotCrop = (c, r) => { r = ((r % 360) + 360) % 360; return r === 0 ? c : r === 90 ? { t: c.l, r: c.t, b: c.r, l: c.b } : r === 180 ? { t: c.b, r: c.l, b: c.t, l: c.r } : { t: c.r, r: c.b, b: c.l, l: c.t }; };
+  const baseToDisp = (x, y, r) => { r = ((r % 360) + 360) % 360; return r === 0 ? [x, y] : r === 90 ? [1 - y, x] : r === 180 ? [1 - x, 1 - y] : [y, 1 - x]; };
+  const dispToBase = (x, y, r) => baseToDisp(x, y, (360 - r) % 360);
+  const pageRot = p => p.blank ? 0 : p.r;
+  const key = p => (p.blank ? "blank" : `${p.f}:${p.i}`) + `:${p.r}:${p.crop ? [p.crop.t, p.crop.r, p.crop.b, p.crop.l].join(",") : ""}:${p.sig ? [p.sig.s, p.sig.x, p.sig.y, p.sig.w].join(",") : ""}`;
   async function ensureThumb(p, img) {
     const k = key(p); let u = thumbCache.get(k);
     if (!u) { await slot(); try { u = thumbCache.get(k); if (!u) { const c = document.createElement("canvas"); await drawPage(p, 240, c); u = await canvasToUrl(c); thumbCache.set(k, u); } } catch (e) { u = ""; } finally { free(); } }
@@ -328,6 +349,7 @@
     const rh = $("#rangehint"); if (what() === "range") { rh.textContent = l.ok ? `Vai exportar ${cnt} ${n1(cnt, "página", "páginas")}: ${(parseRange($("#range").value, n).idx || []).map(i => i + 1).join(", ")}` : l.error; rh.style.color = l.ok ? "" : "var(--danger)"; $("#range").setAttribute("aria-invalid", !l.ok); }
     if (!nameTouched) $("#fname").value = defaultName();
     $("#go").disabled = S.busy || !l.ok || !cnt; $("#go2").disabled = $("#go").disabled;
+    if (core.hooks.ui) core.hooks.ui();
   }
   function whatChanged() { $("#rangewrap").hidden = what() !== "range"; updateUI(); }
 
@@ -421,7 +443,7 @@
     $("#zt").textContent = `Página ${k + 1} de ${S.pages.length}${p.blank ? " (em branco)" : " — " + fileOf(p).name}`;
     $("#zprev").disabled = k === 0; $("#znext").disabled = k === S.pages.length - 1;
     const c = $("#zcanvas"); c.setAttribute("aria-label", `Página ${k + 1} ampliada`);
-    try { await drawPage(p, Math.min(1400, Math.round(Math.min(innerWidth * .9, 940) * Math.min(2, devicePixelRatio || 1))), c); } catch (e) { showAlert("Não consegui ampliar esta página."); }
+    try { await drawPage(p, Math.min(1400, Math.round(Math.min(innerWidth * .9, 940) * Math.min(2, devicePixelRatio || 1))), c); if (core.hooks.zoomOverlay) core.hooks.zoomOverlay(c, p, k, S.pages.length); } catch (e) { showAlert("Não consegui ampliar esta página."); }
   }
   function openZoom(id, opener) { zoomId = id; zoomOpener = opener; const dlg = $("#zoom"); if (!dlg.open) dlg.showModal(); showZoom(); $("#zclose").focus(); }
   $("#zclose").onclick = () => $("#zoom").close();
@@ -440,30 +462,34 @@
     const blob = await new Promise(r => c.toBlob(r, png ? "image/png" : "image/jpeg", q === "original" ? .95 : .85));
     return { bytes: new Uint8Array(await blob.arrayBuffer()), png, w, h };
   }
-  async function rasterPage(f, p) {
+  const COMP = { none: null, light: { px: 2000, q: .85 }, medium: { px: 1400, q: .7 }, strong: { px: 1000, q: .55 } };
+  async function rasterPage(f, p, cfg) {
+    cfg = cfg || { px: coarse ? 1600 : 2400, q: .88 };
     const page = await f.doc.getPage(p.i + 1), rot = (page.rotate + p.r) % 360, base = page.getViewport({ scale: 1, rotation: rot });
-    const sc = Math.min(2, (coarse ? 1600 : 2400) / Math.max(base.width, base.height)), vp = page.getViewport({ scale: sc, rotation: rot });
+    const sc = Math.min(2, cfg.px / Math.max(base.width, base.height)), vp = page.getViewport({ scale: sc, rotation: rot });
     const c = document.createElement("canvas"); c.width = Math.ceil(vp.width); c.height = Math.ceil(vp.height);
     const ctx = c.getContext("2d"); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);
     await page.render({ canvasContext: ctx, viewport: vp }).promise; page.cleanup();
-    const blob = await new Promise(r => c.toBlob(r, "image/jpeg", .88)); c.width = c.height = 0;
+    const blob = await new Promise(r => c.toBlob(r, "image/jpeg", cfg.q)); c.width = c.height = 0;
     return { bytes: new Uint8Array(await blob.arrayBuffer()), w: base.width, h: base.height };
   }
   const tick = () => new Promise(r => setTimeout(r, 0));
   async function build(list, onProgress) {
-    const { PDFDocument, degrees } = window.PDFLib, out = await PDFDocument.create(), srcs = new Map(); let last = null;
+    const { PDFDocument, degrees } = window.PDFLib, out = await PDFDocument.create(), srcs = new Map(), comp = COMP[prefs.comp] || null; let last = null;
     for (let k = 0; k < list.length; k++) {
       if (S.cancel) throw new Error("cancelado");
-      const p = list[k];
+      const p = list[k]; let meta = { kind: "flat", r: 0 };
       if (p.blank) { const sz = last ? [last.getWidth(), last.getHeight()] : A4; last = out.addPage(sz); }
       else {
         const f = fileOf(p);
-        if (f.kind === "pdf" && f.password) {   // PDF que tinha senha: vai como imagem de cada página
-          const im = await rasterPage(f, p), emb = await out.embedJpg(im.bytes), page = out.addPage([im.w, im.h]);
+        if (f.kind === "pdf" && (f.password || comp)) {   // PDF que tinha senha ou será comprimido: vai como imagem de cada página
+          meta = { kind: "flat", r: p.r };
+          const im = await rasterPage(f, p, comp), emb = await out.embedJpg(im.bytes), page = out.addPage([im.w, im.h]);
           page.drawImage(emb, { x: 0, y: 0, width: im.w, height: im.h }); last = page;
         } else if (f.kind === "pdf") {
           let src = srcs.get(f.id); if (!src) { src = await PDFDocument.load(f.bytes, f.password ? { password: f.password, updateMetadata: false } : { updateMetadata: false }); srcs.set(f.id, src); }
-          const [cp] = await out.copyPages(src, [p.i]); cp.setRotation(degrees(((cp.getRotation().angle + p.r) % 360 + 360) % 360)); out.addPage(cp); last = cp;
+          const [cp] = await out.copyPages(src, [p.i]), native = ((cp.getRotation().angle % 360) + 360) % 360; cp.setRotation(degrees(((native + p.r) % 360 + 360) % 360)); out.addPage(cp); last = cp;
+          meta = { kind: "pdf", native, total: (native + p.r) % 360 };
         } else {
           const im = await prepImage(f, prefs.quality), emb = im.png ? await out.embedPng(im.bytes) : await out.embedJpg(im.bytes);
           const m = MARGIN[prefs.margin]; let pw, ph;
@@ -477,9 +503,10 @@
             const ox = cx - (w0 / 2) * Math.cos(a) - (h0 / 2) * Math.sin(a), oy = cy + (w0 / 2) * Math.sin(a) - (h0 / 2) * Math.cos(a);
             page.drawImage(emb, { x: ox, y: oy, width: w0, height: h0, rotate: degrees(-p.r) });
           }
-          last = page;
+          last = page; meta = { kind: "flat", r: p.r };
         }
       }
+      if (core.hooks.decorate) await core.hooks.decorate({ out, page: last, p, meta, k, total: list.length, lib: window.PDFLib });
       onProgress((k + 1) / list.length); if (k % 2 === 1) await tick();
     }
     out.setProducer("Mesa de PDF · VF Tools"); out.setCreator("Mesa de PDF · VF Tools");
@@ -540,5 +567,7 @@
   window.addEventListener("beforeunload", e => { if (S.pages.length && !S.exported) { e.preventDefault(); e.returnValue = ""; } });
 
   render(); whatChanged();
+  Object.assign(core, { S, prefs, savePrefs, $, $$, esc, say, showAlert, hideAlert, mutate, byId, idx, fileOf, render, drawPage, drawBase, selIds, n1, rotCrop, baseToDisp, dispToBase, pageRot, updateUI, COMP });
+  window.MesaCore = core;
   window.__mesa = { S, ingest, render };   // para testes
 })();

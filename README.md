@@ -9,6 +9,11 @@ Parte do [VF Tools](https://vitorfariasvf.github.io/VF-Tools/). Segue o [padrão
 - **Separar:** exporte só as páginas selecionadas ou um intervalo como `1-3, 5, 8-10`.
 - **Organizar:** arraste as páginas (mouse ou toque, pela alça) ou use os botões "Para trás", "Para a frente" e "Mover" para uma posição. Gire, exclua, duplique e insira páginas em branco. Há **desfazer/refazer** e **ampliar** uma página.
 - **Fotos em PDF:** JPG, PNG e WebP, uma foto por página. Tamanho (A4, Carta ou ajustar à foto), margem e qualidade.
+- **Comprimir:** Leve, Média ou Forte. As páginas dos PDFs viram imagens JPEG menores (o texto deixa de ser selecionável).
+- **Marca d’água e carimbo:** texto (Confidencial, Rascunho, Aprovado…) ou imagem, com cor, tamanho, opacidade, ângulo, posição e contorno estilo carimbo, em todas as páginas.
+- **Numerar páginas:** “Página X de Y”, “X / Y”, “X” ou “- X -”, seis posições, número inicial e opção de não numerar a capa.
+- **Assinar:** desenhe, digite ou envie uma imagem da assinatura e posicione na página (arrastando ou pelos controles). Vale uma página ou todas. A assinatura fica só na memória do navegador.
+- **Cortar:** remova margens das páginas selecionadas (ou de todas), com prévia da área que será cortada.
 - **Preferências** (tamanho, margem e qualidade) ficam no `localStorage`. Os arquivos nunca.
 
 ## PDFs com senha
@@ -26,6 +31,7 @@ Arrastar nunca é o único caminho: há botões de mover e o campo "Posição". 
 |---|---|
 | `index.html` | Página (modelo do VF Tools) |
 | `app.js` / `app.css` | Lógica e estilos da ferramenta |
+| `extras.js` | Marca d’água, numeração, assinatura e corte (ligados ao `app.js` por ganchos) |
 | `tool.js` | Helper do VF Tools (armazenamento por ferramenta, tema, toast) |
 | `vendor/` | [pdf-lib](https://pdf-lib.js.org) (MIT) para gerar PDFs e [pdf.js](https://mozilla.github.io/pdf.js/) (Apache-2.0) para as miniaturas. Guardadas aqui para funcionar sem CDN e offline depois do primeiro carregamento |
 
